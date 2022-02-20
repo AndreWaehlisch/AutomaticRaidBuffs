@@ -1,0 +1,13 @@
+## Interface: 20503
+
+## Title: AutomaticRaidBuffs
+
+## Version: @project-version@
+
+## Notes: Automatic raid-wide buffs.
+
+## Notes-deDE: Verteilt automatisch Raid-weite Buffs.
+
+## Author: |cffFF7D0AHoochie|r @EU-Venoxis
+
+AutomaticRaidBuffs.lua
