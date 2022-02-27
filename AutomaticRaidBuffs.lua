@@ -1,11 +1,9 @@
 -- only startup if player is druid
-if ( (select(2,UnitClass("player"))) ~= "DRUID" ) then
-	print("Addon only supported for druids.")
+if ( (select(2, UnitClass("player"))) ~= "DRUID" ) then
+	print("ARB: Addon only supported for druids.")
 	return
 end
 
-local pauseDueToMovement = GetTime() -- if any raid movevement (i.e., players are moved to another raid group) is detected, this variable will contain the current GetTime() to allow for a pause
-local groupsize = "solo" -- will contain either "solo", "party" or "raid"
 local checkSpell1 = GetSpellInfo(1126) -- mark of the wild
 local checkSpell2 = GetSpellInfo(21849) -- gift of the wild
 local isInCombat = InCombatLockdown()
@@ -28,15 +26,15 @@ buffButton:Show()
 
 bb = buffButton
 
-buffButton:SetAttribute("type1", "spell")
-buffButton:SetAttribute("unit", "player")
-buffButton:SetAttribute("spell", 1126)
+buffButton:SetAttribute("type", "spell")
+buffButton:SetAttribute("spell1", checkSpell1)
+buffButton:SetAttribute("spell2", checkSpell2)
+buffButton:RegisterForClicks("RightButtonUp", "LeftButtonUp")
 
 buffButton.labelString = buffButton:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 buffButton.labelString:SetWidth(150)
 buffButton.labelString:SetHeight(25)
-buffButton.labelString:SetText("Welcome to ARB")
-buffButton.labelString:SetPoint("BOTTOM", buffButton, "BOTTOM")
+buffButton.labelString:SetPoint("TOP", buffButton, "BOTTOM", 0, -1)
 
 buffButton.icon = buffButton:CreateTexture()
 buffButton.icon:SetTexture(136078)
@@ -46,6 +44,10 @@ buffButton.cooldownFrame = CreateFrame("Cooldown", nil, buffButton, "CooldownFra
 buffButton.cooldownFrame:SetAllPoints(buffButton)
 
 local function BuffMissing(unitid)
+	if (not UnitExists(unitid)) or UnitIsDeadOrGhost(unitid) or (not UnitIsConnected(unitid)) or (not IsSpellInRange(checkSpell1, unitid)) then
+		return false
+	end
+
 	local curtime = GetTime()
 
 	local spell1, _, _, _, _, expiration1 = AuraUtil.FindAuraByName(checkSpell1, unitid)
@@ -116,53 +118,53 @@ local function SearchBuff()
 end
 
 local buffeventFrame = CreateFrame("Frame")
-buffeventFrame:RegisterEvent("UNIT_AURA")
-buffeventFrame:SetScript("OnEvent", function(self, event, unit)
-	if not isInCombat then
+buffeventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+buffeventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+
+local elapsed = 0
+local function eventFunc(self, event_elapsed, ...)
+	if event_elapsed == "PLAYER_REGEN_DISABLED" then
+		-- do stuff when we enter combat
+		buffButton:Hide()
+		buffeventFrame:Hide() -- disable OnUpdate by hiding the frame
+		isInCombat = true
+		return
+	elseif event_elapsed == "PLAYER_REGEN_ENABLED" then
+		-- do stuff when we leave combat
+		buffeventFrame:Show() -- renable OnUpdate
+		isInCombat = false
+	else
+		--OnUpdate
+		elapsed = elapsed + event_elapsed
+	end
+
+	if (not isInCombat) and (elapsed > 0.5) then
+		elapsed = 0
+
 		local buff_unitid, buff_num = SearchBuff()
 		if buff_num > 0 then
 			buffButton:Show()
-			buffButton.labelString:SetText(buff_unitid)
+			local unitname = UnitNameUnmodified(buff_unitid)
+			local unitclass = UnitClassBase(buff_unitid)
+			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
+			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. ")")
 			buffButton:SetAttribute("unit", buff_unitid)
-			buffButton:SetAttribute("spell", 26990)
-			--TODO add check for GOTW instead of MOTW
+			--TODO add "out of range" status?
 		else
 			buffButton:Hide()
 		end
 	end
-end)
-
-local function GetGCD()
-	return GetSpellCooldown(1126)
 end
+
+buffeventFrame:SetScript("OnEvent", eventFunc)
+buffeventFrame:SetScript("OnUpdate", eventFunc)
 
 local GCDeventFrame = CreateFrame("Frame")
 GCDeventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
 --GCDeventFrame:RegisterEvent("UNIT_SPELLCAST_FAILED_QUIET")
 GCDeventFrame:SetScript("OnEvent", function(self, event, ...)
-	local start, dur, enabled = GetGCD()
+	local start, dur, enabled = GetSpellCooldown(1126)
 	if (enabled == 1) and (dur > 0) and (start > 0) then
 		buffButton.cooldownFrame:SetCooldown(start, dur)
 	end
-end)
-
-local combateventFrame = CreateFrame("Frame")
-combateventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-combateventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-combateventFrame:SetScript("OnEvent", function(self, event, ...)
-	if event == "PLAYER_REGEN_ENABLED" then
-		-- do stuff when we leave combat
-		buffButton:Show()
-		isInCombat = false
-	else
-		-- do stuff when we enter combat
-		buffButton:Hide()
-		isInCombat = true
-	end
-end)
-
-local raidmovementFrame = CreateFrame("Frame")
-raidmovementFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
-raidmovementFrame:SetScript("OnEvent", function(self, event, ...)
-	pauseDueToMovement = GetTime() -- TODO
 end)
