@@ -8,7 +8,6 @@ local checkSpell1 = GetSpellInfo(1126) -- mark of the wild
 local checkSpell2 = GetSpellInfo(21849) -- gift of the wild
 local isInCombat = InCombatLockdown()
 
--- setup Buff Button, this is where the magic happens :)
 local buffButton = CreateFrame("Button", "AutomaticRaidBuffs_BuffButton", UIParent, "SecureActionButtonTemplate")
 buffButton:SetPoint("CENTER", UIParent, "CENTER")
 buffButton:SetWidth(100)
@@ -23,8 +22,6 @@ buffButton:SetScript("OnDragStop", function()
 	buffButton:StopMovingOrSizing()
 end)
 buffButton:Show()
-
-bb = buffButton
 
 buffButton:SetAttribute("type", "spell")
 buffButton:SetAttribute("spell1", checkSpell1)
@@ -158,7 +155,6 @@ local function eventFunc(self, event_elapsed, ...)
 			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
 			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. ((buff_num_rangecheck > 1) and "/" .. buff_num_rangecheck or "") .. ")")
 			buffButton:SetAttribute("unit", buff_unitid)
-			--TODO add "out of range" status?
 		else
 			buffButton:Hide()
 		end
@@ -170,7 +166,6 @@ buffeventFrame:SetScript("OnUpdate", eventFunc)
 
 local GCDeventFrame = CreateFrame("Frame")
 GCDeventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
---GCDeventFrame:RegisterEvent("UNIT_SPELLCAST_FAILED_QUIET")
 GCDeventFrame:SetScript("OnEvent", function(self, event, ...)
 	local start, dur, enabled = GetSpellCooldown(1126)
 	if (enabled == 1) and (dur > 0) and (start > 0) then
