@@ -44,7 +44,7 @@ buffButton.cooldownFrame = CreateFrame("Cooldown", nil, buffButton, "CooldownFra
 buffButton.cooldownFrame:SetAllPoints(buffButton)
 
 local function BuffMissing(unitid)
-	if (not UnitExists(unitid)) or UnitIsDeadOrGhost(unitid) or (not UnitIsConnected(unitid)) or (not IsSpellInRange(checkSpell1, unitid)) then
+	if (not UnitExists(unitid)) or UnitIsDeadOrGhost(unitid) or (not UnitIsConnected(unitid)) then
 		return false
 	end
 
@@ -64,12 +64,13 @@ local function BuffMissing(unitid)
 		missing2 = false
 	end
 
-	return (missing1 and missing2)
+	return (missing1 and missing2), IsSpellInRange(checkSpell1, unitid)
 end
 
 local function SearchBuff()
 	local buff_unitid = ""
-	local buff_num = 0
+	local buff_num = 0 -- number of members missing buffs (and are in range for buffing!)
+	local buff_num_rangecheck = 0 -- total number of members missing buffs, even if they are out of range
 	local isinraid = IsInRaid()
 	local unit_base = "party"
 	local group_end_mod = 4
@@ -86,10 +87,15 @@ local function SearchBuff()
 		end
 
 		local unitid = unit_base .. i_member
+		local buffMissing, inRange = BuffMissing(unitid)
 
-		if BuffMissing(unitid) then
-			buff_unitid = unitid
-			buff_num = buff_num + 1
+		if buffMissing then
+			if inRange then
+				buff_unitid = unitid
+				buff_num = buff_num + 1
+			end
+
+			buff_num_rangecheck = buff_num_rangecheck + 1
 		end
 	end
 
@@ -98,6 +104,7 @@ local function SearchBuff()
 		if BuffMissing("player") then
 			buff_unitid = "player"
 			buff_num = 1
+			buff_num_rangecheck = 1
 		end
 	end
 
@@ -105,16 +112,18 @@ local function SearchBuff()
 	if buff_num == 0 then
 		for i_member = 1, GetNumGroupMembers() do
 			local unitid = unit_base .. "pet" .. i_member
+			local buffMissing, inRange = BuffMissing(unitid)
 
-			if BuffMissing(unitid) then
+			if (buffMissing and inRange) then
 				buff_unitid = unitid
 				buff_num = 1
+				buff_num_rangecheck = 1
 				break
 			end
 		end
 	end
 
-	return buff_unitid, buff_num
+	return buff_unitid, buff_num, buff_num_rangecheck
 end
 
 local buffeventFrame = CreateFrame("Frame")
@@ -141,13 +150,13 @@ local function eventFunc(self, event_elapsed, ...)
 	if (not isInCombat) and (elapsed > 0.5) then
 		elapsed = 0
 
-		local buff_unitid, buff_num = SearchBuff()
+		local buff_unitid, buff_num, buff_num_rangecheck = SearchBuff()
 		if buff_num > 0 then
 			buffButton:Show()
 			local unitname = UnitNameUnmodified(buff_unitid)
 			local unitclass = UnitClassBase(buff_unitid)
 			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
-			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. ")")
+			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. ((buff_num_rangecheck > 1) and "/" .. buff_num_rangecheck or "") .. ")")
 			buffButton:SetAttribute("unit", buff_unitid)
 			--TODO add "out of range" status?
 		else
