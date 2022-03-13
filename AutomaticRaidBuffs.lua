@@ -6,7 +6,6 @@ end
 
 local checkSpell1 = GetSpellInfo(1126) -- mark of the wild
 local checkSpell2 = GetSpellInfo(21849) -- gift of the wild
-local isInCombat = InCombatLockdown()
 
 local buffButton = CreateFrame("Button", "AutomaticRaidBuffs_BuffButton", UIParent, "SecureActionButtonTemplate")
 buffButton:SetPoint("CENTER", UIParent, "CENTER")
@@ -41,8 +40,8 @@ buffButton.cooldownFrame = CreateFrame("Cooldown", nil, buffButton, "CooldownFra
 buffButton.cooldownFrame:SetAllPoints(buffButton)
 
 local function BuffMissing(unitid)
-	if (not UnitExists(unitid)) or UnitIsDeadOrGhost(unitid) or (not UnitIsConnected(unitid)) then
-		return false
+	if (not UnitExists(unitid)) or (not UnitIsConnected(unitid)) then
+		return false, true
 	end
 
 	local curtime = GetTime()
@@ -53,15 +52,17 @@ local function BuffMissing(unitid)
 	local missing1 = true
 	local missing2 = true
 
-	if spell1 and ((expiration1 - curtime) > 300) then
+	if spell1 and (((expiration1 - curtime) > 300) or (expiration1 == 0)) then
 		missing1 = false
 	end
 
-	if spell2 and ((expiration2 - curtime) > 300) then
+	if spell2 and (((expiration2 - curtime) > 300) or (expiration2 == 0)) then
 		missing2 = false
 	end
 
-	return (missing1 and missing2), IsSpellInRange(checkSpell1, unitid)
+	local alive_inrange = (not UnitIsDeadOrGhost(unitid)) and (IsSpellInRange(checkSpell1, unitid) == 1)
+
+	return (missing1 and missing2), alive_inrange
 end
 
 local function SearchBuff()
@@ -78,40 +79,38 @@ local function SearchBuff()
 	end
 
 	for i_member = 1, GetNumGroupMembers() do
-		if (buff_num > 0) and (((i_member - 1) % group_end_mod) == 0) then
+		if (buff_num_rangecheck > 0) and (((i_member - 1) % group_end_mod) == 0) then
 			-- we found a group/groupmember with missing buffs, bail out
 			break
 		end
 
 		local unitid = unit_base .. i_member
-		local buffMissing, inRange = BuffMissing(unitid)
+		local buffMissing, alive_inrange = BuffMissing(unitid)
 
 		if buffMissing then
-			if inRange then
-				buff_unitid = unitid
+			buff_unitid = unitid
+			buff_num_rangecheck = buff_num_rangecheck + 1
+
+			if alive_inrange then
 				buff_num = buff_num + 1
 			end
-
-			buff_num_rangecheck = buff_num_rangecheck + 1
 		end
 	end
 
 	-- check for player if not in raid (since player is not part of "partyN"
-	if (not isinraid) and (buff_num == 0) then
-		if BuffMissing("player") then
-			buff_unitid = "player"
-			buff_num = 1
-			buff_num_rangecheck = 1
-		end
+	if (not isinraid) and BuffMissing("player") then
+		buff_unitid = "player"
+		buff_num = buff_num + 1
+		buff_num_rangecheck = buff_num_rangecheck + 1
 	end
 
 	-- check pets
-	if buff_num == 0 then
+	if (buff_num_rangecheck == 0) then
 		for i_member = 1, GetNumGroupMembers() do
 			local unitid = unit_base .. "pet" .. i_member
-			local buffMissing, inRange = BuffMissing(unitid)
+			local buffMissing, alive_inrange = BuffMissing(unitid)
 
-			if (buffMissing and inRange) then
+			if (buffMissing and alive_inrange) then
 				buff_unitid = unitid
 				buff_num = 1
 				buff_num_rangecheck = 1
@@ -126,34 +125,37 @@ end
 local buffeventFrame = CreateFrame("Frame")
 buffeventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 buffeventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+buffeventFrame:RegisterEvent("PLAYER_UNGHOST")
+buffeventFrame:RegisterEvent("PLAYER_ALIVE")
+buffeventFrame:RegisterEvent("PLAYER_DEAD")
 
 local elapsed = 0
 local function eventFunc(self, event_elapsed, ...)
-	if event_elapsed == "PLAYER_REGEN_DISABLED" then
-		-- do stuff when we enter combat
-		buffButton:Hide()
-		buffeventFrame:Hide() -- disable OnUpdate by hiding the frame
-		isInCombat = true
+	if (event_elapsed == "PLAYER_REGEN_DISABLED") or (event_elapsed == "PLAYER_DEAD") then
+		-- do stuff when we enter combat or die
+		if not InCombatLockdown() then
+			buffButton:Hide()
+			buffeventFrame:Hide() -- disable OnUpdate by hiding the frame
+		end
 		return
-	elseif event_elapsed == "PLAYER_REGEN_ENABLED" then
-		-- do stuff when we leave combat
+	elseif (type(event_elapsed) == "string") then
+		-- do stuff when we leave combat or are alive again (i.e., on any other events than those above which are not OnUpdate)
 		buffeventFrame:Show() -- renable OnUpdate
-		isInCombat = false
 	else
 		--OnUpdate
 		elapsed = elapsed + event_elapsed
 	end
 
-	if (not isInCombat) and (elapsed > 0.5) then
+	if (elapsed > 0.5) then
 		elapsed = 0
 
 		local buff_unitid, buff_num, buff_num_rangecheck = SearchBuff()
-		if buff_num > 0 then
+		if buff_num_rangecheck > 0 then
 			buffButton:Show()
 			local unitname = UnitNameUnmodified(buff_unitid)
 			local unitclass = UnitClassBase(buff_unitid)
 			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
-			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. ((buff_num_rangecheck > 1) and "/" .. buff_num_rangecheck or "") .. ")")
+			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. "/" .. buff_num_rangecheck .. ")")
 			buffButton:SetAttribute("unit", buff_unitid)
 		else
 			buffButton:Hide()
