@@ -66,60 +66,50 @@ local function BuffMissing(unitid)
 end
 
 local function SearchBuff()
-	local buff_unitid = ""
-	local buff_num = 0 -- number of members missing buffs (and are in range for buffing!)
-	local buff_num_rangecheck = 0 -- total number of members missing buffs, even if they are out of range
 	local isinraid = IsInRaid()
 	local unit_base = "party"
-	local group_end_mod = 4
 
 	if isinraid then
 		unit_base = "raid"
 		group_end_mod = 5
 	end
 
-	for i_member = 1, GetNumGroupMembers() do
-		if (buff_num_rangecheck > 0) and (((i_member - 1) % group_end_mod) == 0) then
-			-- we found a group/groupmember with missing buffs, bail out
-			break
-		end
+	local result_arr = {{}, {}, {}, {}, {}}
+	local result_pet = nil
 
+	for i_member = 1, GetNumGroupMembers() do
 		local unitid = unit_base .. i_member
 		local buffMissing, alive_inrange = BuffMissing(unitid)
+		local subgroup = (not isinraid) and 1 or select(3, GetRaidRosterInfo(i_member))
+		local arr = {}
 
-		if buffMissing then
-			buff_unitid = unitid
-			buff_num_rangecheck = buff_num_rangecheck + 1
+		tinsert(result_arr[subgroup], arr)
 
-			if alive_inrange then
-				buff_num = buff_num + 1
-			end
+		arr["unitid"] = unitid
+		arr["buffMissing"] = buffMissing
+		arr["alive_inrange"] = alive_inrange
+
+		-- check pet
+		unitid = unit_base .. "pet" .. i_member
+		buffMissing, alive_inrange = BuffMissing(unitid)
+		if buffMissing and alive_inrange then
+			result_pet = unitid
 		end
 	end
 
-	-- check for player if not in raid (since player is not part of "partyN"
-	if (not isinraid) and BuffMissing("player") then
-		buff_unitid = "player"
-		buff_num = buff_num + 1
-		buff_num_rangecheck = buff_num_rangecheck + 1
+	-- check for player if not in raid (since player is not part of "partyN")
+	if (not isinraid) then
+		local buffMissing, alive_inrange = BuffMissing("player")
+		local arr = {}
+
+		tinsert(result_arr[1], arr)
+
+		arr["unitid"] = "player"
+		arr["buffMissing"] = buffMissing
+		arr["alive_inrange"] = alive_inrange
 	end
 
-	-- check pets
-	if (buff_num_rangecheck == 0) then
-		for i_member = 1, GetNumGroupMembers() do
-			local unitid = unit_base .. "pet" .. i_member
-			local buffMissing, alive_inrange = BuffMissing(unitid)
-
-			if (buffMissing and alive_inrange) then
-				buff_unitid = unitid
-				buff_num = 1
-				buff_num_rangecheck = 1
-				break
-			end
-		end
-	end
-
-	return buff_unitid, buff_num, buff_num_rangecheck
+	return result_arr, result_pet
 end
 
 local buffeventFrame = CreateFrame("Frame")
@@ -149,7 +139,39 @@ local function eventFunc(self, event_elapsed, ...)
 	if (elapsed > 0.5) then
 		elapsed = 0
 
-		local buff_unitid, buff_num, buff_num_rangecheck = SearchBuff()
+		local result_arr, result_pet = SearchBuff()
+
+		local buff_unitid = nil
+		local buff_num = 0
+		local buff_num_rangecheck = 0
+
+		for i_subgroup, arr_subgroup in pairs(result_arr) do
+			for i, arr in pairs(arr_subgroup) do
+				if arr["buffMissing"] then
+					buff_num_rangecheck = buff_num_rangecheck + 1
+					buff_unitid = arr["unitid"]
+
+					if arr["alive_inrange"] then
+						buff_num = buff_num + 1
+					end
+				end
+
+			end
+
+			-- found a subgroup with missing buffs, stop there
+			if (buff_num_rangecheck > 0) then
+				break
+			end
+		end
+
+		-- if no player needs buffs: check for pets
+		if (buff_num_rangecheck == 0) and (result_pet ~= nil) then
+			buff_num = 1
+			buff_num_rangecheck = 1
+			buff_unitid = result_pet
+		end
+
+
 		if buff_num_rangecheck > 0 then
 			buffButton:Show()
 			local unitname = UnitNameUnmodified(buff_unitid)
