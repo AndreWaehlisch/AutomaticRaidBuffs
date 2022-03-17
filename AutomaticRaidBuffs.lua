@@ -179,6 +179,7 @@ local function eventFunc(self, event_elapsed, ...)
 			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
 			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. "/" .. buff_num_rangecheck .. ")")
 			buffButton:SetAttribute("unit", buff_unitid)
+			buffButton.icon:SetDesaturated(buff_num < buff_num_rangecheck)
 		else
 			buffButton:Hide()
 		end
