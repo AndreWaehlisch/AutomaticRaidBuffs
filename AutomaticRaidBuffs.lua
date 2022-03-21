@@ -67,11 +67,12 @@ end
 
 local function SearchBuff()
 	local isinraid = IsInRaid()
-	local unit_base = "party"
 
+	local unit_base
 	if isinraid then
 		unit_base = "raid"
-		group_end_mod = 5
+	else
+		unit_base = "party"
 	end
 
 	local result_arr = {{}, {}, {}, {}, {}}
@@ -80,20 +81,28 @@ local function SearchBuff()
 	for i_member = 1, GetNumGroupMembers() do
 		local unitid = unit_base .. i_member
 		local buffMissing, alive_inrange = BuffMissing(unitid)
-		local subgroup = (not isinraid) and 1 or select(3, GetRaidRosterInfo(i_member))
 		local arr = {}
 
-		tinsert(result_arr[subgroup], arr)
+		local subgroup
+		if isinraid then
+			subgroup = select(3, GetRaidRosterInfo(i_member))
+		else
+			subgroup = 1
+		end
 
-		arr["unitid"] = unitid
-		arr["buffMissing"] = buffMissing
-		arr["alive_inrange"] = alive_inrange
+		if ( subgroup ~= nil ) then
+			tinsert(result_arr[subgroup], arr)
 
-		-- check pet
-		unitid = unit_base .. "pet" .. i_member
-		buffMissing, alive_inrange = BuffMissing(unitid)
-		if buffMissing and alive_inrange then
-			result_pet = unitid
+			arr["unitid"] = unitid
+			arr["buffMissing"] = buffMissing
+			arr["alive_inrange"] = alive_inrange
+
+			-- check pet
+			unitid = unit_base .. "pet" .. i_member
+			buffMissing, alive_inrange = BuffMissing(unitid)
+			if buffMissing and alive_inrange then
+				result_pet = unitid
+			end
 		end
 	end
 
