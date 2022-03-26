@@ -1,4 +1,4 @@
-## Interface: 20503
+## Interface: 20504
 
 ## Title: AutomaticRaidBuffs
 
@@ -10,4 +10,4 @@
 
 ## Author: |cffFF7D0AHoochie|r @EU-Venoxis
 
-AutomaticRaidBuffs.lua
+core.lua
