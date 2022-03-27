@@ -4,6 +4,20 @@ if ( (select(2, UnitClass("player"))) ~= "DRUID" ) then
 	return
 end
 
+local function format_percent(percent)
+	return format("%d", ceil(percent))
+end
+
+local function percent_color(percent)
+	if percent > 80 then
+		return "|cff00cc00" .. format_percent(percent) .. "|r"
+	elseif percent > 25 then
+		return format_percent(percent)
+	else
+		return "|cffcc0000" .. format_percent(percent) .. "|r"
+	end
+end
+
 local checkSpell1 = GetSpellInfo(1126) -- mark of the wild
 local checkSpell2 = GetSpellInfo(21849) -- gift of the wild
 
@@ -32,6 +46,11 @@ buffButton.labelString:SetWidth(150)
 buffButton.labelString:SetHeight(25)
 buffButton.labelString:SetPoint("TOP", buffButton, "BOTTOM", 0, -1)
 
+buffButton.durationString = buffButton:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+buffButton.durationString:SetWidth(150)
+buffButton.durationString:SetHeight(25)
+buffButton.durationString:SetPoint("TOP", buffButton.labelString, "BOTTOM")
+
 buffButton.icon = buffButton:CreateTexture()
 buffButton.icon:SetTexture(136078)
 buffButton.icon:SetAllPoints(buffButton)
@@ -39,30 +58,41 @@ buffButton.icon:SetAllPoints(buffButton)
 buffButton.cooldownFrame = CreateFrame("Cooldown", nil, buffButton, "CooldownFrameTemplate")
 buffButton.cooldownFrame:SetAllPoints(buffButton)
 
-local function BuffMissing(unitid)
+local function BuffMissing(unitid, curtime)
 	if (not UnitExists(unitid)) or (not UnitIsConnected(unitid)) then
-		return false, true
+		return false, true, curtime
 	end
 
-	local curtime = GetTime()
-
+	local expiration = curtime
 	local spell1, _, _, _, _, expiration1 = AuraUtil.FindAuraByName(checkSpell1, unitid)
 	local spell2, _, _, _, _, expiration2 = AuraUtil.FindAuraByName(checkSpell2, unitid)
 
 	local missing1 = true
 	local missing2 = true
 
-	if spell1 and (((expiration1 - curtime) > 300) or (expiration1 == 0)) then
-		missing1 = false
+	if spell1 then
+		if (((expiration1 - curtime) > 420) or (expiration1 == 0)) then
+			missing1 = false
+		end
+
+		if expiration1 > 0 then
+			expiration = expiration1
+		end
 	end
 
-	if spell2 and (((expiration2 - curtime) > 300) or (expiration2 == 0)) then
-		missing2 = false
+	if spell2 then
+		if (((expiration2 - curtime) > 420) or (expiration2 == 0)) then
+			missing2 = false
+		end
+
+		if expiration2 > 0 then
+			expiration = expiration2
+		end
 	end
 
 	local alive_inrange = (not UnitIsDeadOrGhost(unitid)) and (IsSpellInRange(checkSpell1, unitid) == 1)
 
-	return (missing1 and missing2), alive_inrange
+	return (missing1 and missing2), alive_inrange, expiration
 end
 
 local function SearchBuff()
@@ -75,12 +105,13 @@ local function SearchBuff()
 		unit_base = "party"
 	end
 
+	local curtime = GetTime()
 	local result_arr = {{}, {}, {}, {}, {}}
 	local result_pet = nil
 
 	for i_member = 1, GetNumGroupMembers() do
 		local unitid = unit_base .. i_member
-		local buffMissing, alive_inrange = BuffMissing(unitid)
+		local buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
 		local arr = {}
 
 		local subgroup
@@ -96,10 +127,11 @@ local function SearchBuff()
 			arr["unitid"] = unitid
 			arr["buffMissing"] = buffMissing
 			arr["alive_inrange"] = alive_inrange
+			arr["buffDuration"] = expiration - curtime
 
 			-- check pet
 			unitid = unit_base .. "pet" .. i_member
-			buffMissing, alive_inrange = BuffMissing(unitid)
+			buffMissing, alive_inrange = BuffMissing(unitid, curtime)
 			if buffMissing and alive_inrange then
 				result_pet = unitid
 			end
@@ -108,7 +140,7 @@ local function SearchBuff()
 
 	-- check for player if not in raid (since player is not part of "partyN")
 	if (not isinraid) then
-		local buffMissing, alive_inrange = BuffMissing("player")
+		local buffMissing, alive_inrange, expiration = BuffMissing("player", curtime)
 		local arr = {}
 
 		tinsert(result_arr[1], arr)
@@ -116,6 +148,7 @@ local function SearchBuff()
 		arr["unitid"] = "player"
 		arr["buffMissing"] = buffMissing
 		arr["alive_inrange"] = alive_inrange
+		arr["buffDuration"] = expiration - curtime
 	end
 
 	return result_arr, result_pet
@@ -153,8 +186,13 @@ local function eventFunc(self, event_elapsed, ...)
 		local buff_unitid = nil
 		local buff_num = 0
 		local buff_num_rangecheck = 0
+		local buffDuration -- duration (in seconds) of remaining buffs
+		local subgroup = 1
 
 		for i_subgroup, arr_subgroup in pairs(result_arr) do
+			buffDuration = 0
+			subgroup = i_subgroup
+
 			for i, arr in pairs(arr_subgroup) do
 				if arr["buffMissing"] then
 					buff_num_rangecheck = buff_num_rangecheck + 1
@@ -163,6 +201,8 @@ local function eventFunc(self, event_elapsed, ...)
 					if arr["alive_inrange"] then
 						buff_num = buff_num + 1
 					end
+
+					buffDuration = buffDuration + arr["buffDuration"]
 				end
 
 			end
@@ -180,13 +220,16 @@ local function eventFunc(self, event_elapsed, ...)
 			buff_unitid = result_pet
 		end
 
-
 		if buff_num_rangecheck > 0 then
 			buffButton:Show()
 			local unitname = UnitNameUnmodified(buff_unitid)
 			local unitclass = UnitClassBase(buff_unitid)
 			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
+			local percent_color_string = percent_color(100 * buffDuration / (max(GetNumSubgroupMembers(subgroup), 1)*3600))
+
 			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. "/" .. buff_num_rangecheck .. ")")
+			buffButton.durationString:SetText("Grp: " .. subgroup .. " | Duration: " .. percent_color_string .. "%")
+
 			buffButton:SetAttribute("unit", buff_unitid)
 			buffButton.icon:SetDesaturated(buff_num < buff_num_rangecheck)
 		else
