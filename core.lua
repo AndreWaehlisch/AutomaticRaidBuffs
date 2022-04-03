@@ -121,7 +121,7 @@ local function SearchBuff()
 			subgroup = 1
 		end
 
-		if ( subgroup ~= nil ) then
+		if ( (subgroup ~= nil) and (subgroup <=5) ) then
 			tinsert(result_arr[subgroup], arr)
 
 			arr["unitid"] = unitid
@@ -202,9 +202,8 @@ local function eventFunc(self, event_elapsed, ...)
 						buff_num = buff_num + 1
 					end
 
-					buffDuration = buffDuration + arr["buffDuration"]
 				end
-
+				buffDuration = buffDuration + arr["buffDuration"]
 			end
 
 			-- found a subgroup with missing buffs, stop there
