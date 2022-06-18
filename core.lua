@@ -34,7 +34,9 @@ end)
 buffButton:SetScript("OnDragStop", function()
 	buffButton:StopMovingOrSizing()
 end)
-buffButton:Show()
+if not InCombatLockdown() then
+	buffButton:Show()
+end
 
 buffButton:SetAttribute("type", "spell")
 buffButton:SetAttribute("spell1", checkSpell1)
@@ -47,7 +49,7 @@ buffButton.labelString:SetHeight(25)
 buffButton.labelString:SetPoint("TOP", buffButton, "BOTTOM", 0, -1)
 
 buffButton.durationString = buffButton:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-buffButton.durationString:SetWidth(150)
+buffButton.durationString:SetWidth(160)
 buffButton.durationString:SetHeight(25)
 buffButton.durationString:SetPoint("TOP", buffButton.labelString, "BOTTOM")
 
@@ -171,6 +173,10 @@ local function eventFunc(self, event_elapsed, ...)
 		end
 		return
 	elseif (type(event_elapsed) == "string") then
+		if InCombatLockdown() then
+			return
+		end
+
 		-- do stuff when we leave combat or are alive again (i.e., on any other events than those above which are not OnUpdate)
 		buffeventFrame:Show() -- renable OnUpdate
 	else
@@ -183,32 +189,46 @@ local function eventFunc(self, event_elapsed, ...)
 
 		local result_arr, result_pet = SearchBuff()
 
-		local buff_unitid = nil
-		local buff_num = 0
-		local buff_num_rangecheck = 0
+		local buff_num
+		local buff_num_rangecheck
 		local buffDuration -- duration (in seconds) of remaining buffs
-		local subgroup = 1
+		local subgroup
+		local buff_unitid
 
-		for i_subgroup, arr_subgroup in pairs(result_arr) do
-			buffDuration = 0
-			subgroup = i_subgroup
+		for iter = 1, 2 do
+			buff_num = 0
+			buff_num_rangecheck = 0
+			subgroup = 1
+			buff_unitid = nil
 
-			for i, arr in pairs(arr_subgroup) do
-				if arr["buffMissing"] then
-					buff_num_rangecheck = buff_num_rangecheck + 1
-					buff_unitid = arr["unitid"]
+			for i_subgroup, arr_subgroup in pairs(result_arr) do
+				buffDuration = 0
+				buffDuration_min = 1E10
+				subgroup = i_subgroup
 
-					if arr["alive_inrange"] then
-						buff_num = buff_num + 1
+				for i, arr in pairs(arr_subgroup) do
+					if arr["buffMissing"] then
+						buff_num_rangecheck = buff_num_rangecheck + 1
+						buff_unitid = arr["unitid"]
+
+						if arr["alive_inrange"] then
+							buff_num = buff_num + 1
+						end
+
 					end
-
+					buffDuration = buffDuration + arr["buffDuration"]
+					buffDuration_min = min(buffDuration, arr["buffDuration"])
 				end
-				buffDuration = buffDuration + arr["buffDuration"]
-			end
 
-			-- found a subgroup with missing buffs, stop there
-			if (buff_num_rangecheck > 0) then
-				break
+				-- found a subgroup with missing buffs and everyone in range, stop here
+				if (iter == 1) and (buff_num_rangecheck == buff_num) then
+					break
+				end
+
+				-- on the second iter, found a subgroup with missing buffs (not everyone in range), stop there
+				if (iter == 2) and (buff_num_rangecheck > 0) then
+					break
+				end
 			end
 		end
 
@@ -224,10 +244,11 @@ local function eventFunc(self, event_elapsed, ...)
 			local unitname = UnitNameUnmodified(buff_unitid)
 			local unitclass = UnitClassBase(buff_unitid)
 			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
-			local percent_color_string = percent_color(100 * buffDuration / (max(GetNumSubgroupMembers(subgroup), 1)*3600))
+			local percent_color_string_all = percent_color(100 * buffDuration / (max(GetNumSubgroupMembers(subgroup), 1)*3600))
+			local percent_color_string_min = percent_color(100 * buffDuration_min / 3600)
 
 			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. "/" .. buff_num_rangecheck .. ")")
-			buffButton.durationString:SetText("Grp: " .. subgroup .. " | Duration: " .. percent_color_string .. "%")
+			buffButton.durationString:SetText("Grp: " .. subgroup .. " | Duration: " .. percent_color_string_min .. "% / " ..  percent_color_string_all .. "%")
 
 			buffButton:SetAttribute("unit", buff_unitid)
 			buffButton.icon:SetDesaturated(buff_num < buff_num_rangecheck)
