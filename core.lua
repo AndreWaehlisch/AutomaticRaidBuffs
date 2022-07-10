@@ -49,7 +49,7 @@ buffButton.labelString:SetHeight(25)
 buffButton.labelString:SetPoint("TOP", buffButton, "BOTTOM", 0, -1)
 
 buffButton.durationString = buffButton:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-buffButton.durationString:SetWidth(160)
+buffButton.durationString:SetWidth(200)
 buffButton.durationString:SetHeight(25)
 buffButton.durationString:SetPoint("TOP", buffButton.labelString, "BOTTOM")
 
@@ -193,42 +193,56 @@ local function eventFunc(self, event_elapsed, ...)
 		local buff_num_rangecheck
 		local buffDuration -- duration (in seconds) of remaining buffs
 		local subgroup
+		local num_subgroup_members
+		local buffDuration_min
 		local buff_unitid
+		local iter_break = false
 
 		for iter = 1, 2 do
-			buff_num = 0
-			buff_num_rangecheck = 0
-			subgroup = 1
-			buff_unitid = nil
-
 			for i_subgroup, arr_subgroup in pairs(result_arr) do
+				buff_num = 0
+				buff_num_rangecheck = 0
 				buffDuration = 0
-				buffDuration_min = 1E10
 				subgroup = i_subgroup
+				num_subgroup_members = 0
+				buffDuration_min = 1E300
+				buff_unitid = nil
 
 				for i, arr in pairs(arr_subgroup) do
 					if arr["buffMissing"] then
 						buff_num_rangecheck = buff_num_rangecheck + 1
-						buff_unitid = arr["unitid"]
 
 						if arr["alive_inrange"] then
 							buff_num = buff_num + 1
 						end
 
 					end
+
 					buffDuration = buffDuration + arr["buffDuration"]
-					buffDuration_min = min(buffDuration, arr["buffDuration"])
+
+					if ( (arr["buffDuration"] < buffDuration_min) and ((buff_unitid == nil) or arr["alive_inrage"]) ) then
+						buffDuration_min = arr["buffDuration"]
+						buff_unitid = arr["unitid"]
+					end
+
+					num_subgroup_members = num_subgroup_members + 1
 				end
 
 				-- found a subgroup with missing buffs and everyone in range, stop here
 				if (iter == 1) and (buff_num_rangecheck == buff_num) then
+					iter_break = true
 					break
 				end
 
 				-- on the second iter, found a subgroup with missing buffs (not everyone in range), stop there
 				if (iter == 2) and (buff_num_rangecheck > 0) then
+					iter_break = true
 					break
 				end
+			end
+
+			if iter_break then
+				break
 			end
 		end
 
@@ -244,11 +258,11 @@ local function eventFunc(self, event_elapsed, ...)
 			local unitname = UnitNameUnmodified(buff_unitid)
 			local unitclass = UnitClassBase(buff_unitid)
 			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
-			local percent_color_string_all = percent_color(100 * buffDuration / (max(GetNumSubgroupMembers(subgroup), 1)*3600))
+			local percent_color_string_all = percent_color(100 * buffDuration / (max(num_subgroup_members, 1)*3600))
 			local percent_color_string_min = percent_color(100 * buffDuration_min / 3600)
 
 			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. "/" .. buff_num_rangecheck .. ")")
-			buffButton.durationString:SetText("Grp: " .. subgroup .. " | Duration: " .. percent_color_string_min .. "% / " ..  percent_color_string_all .. "%")
+			buffButton.durationString:SetText("Grp: " .. subgroup .. "\nDuration: " .. percent_color_string_min .. "% / " ..  percent_color_string_all .. "%")
 
 			buffButton:SetAttribute("unit", buff_unitid)
 			buffButton.icon:SetDesaturated(buff_num < buff_num_rangecheck)
