@@ -62,7 +62,7 @@ buffButton.cooldownFrame:SetAllPoints(buffButton)
 
 local function BuffMissing(unitid, curtime)
 	if (not UnitExists(unitid)) or (not UnitIsConnected(unitid)) then
-		return false, true, curtime
+		return false, true, curtime + 3600
 	end
 
 	local expiration = curtime
@@ -103,15 +103,17 @@ local function SearchBuff()
 	local unit_base
 	if isinraid then
 		unit_base = "raid"
+		n_members = GetNumGroupMembers()
 	else
 		unit_base = "party"
+		n_members = GetNumGroupMembers() - 1 -- player is not part of party
 	end
 
 	local curtime = GetTime()
 	local result_arr = {{}, {}, {}, {}, {}}
 	local result_pet = nil
 
-	for i_member = 1, GetNumGroupMembers() do
+	for i_member = 1, n_members do
 		local unitid = unit_base .. i_member
 		local buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
 		local arr = {}
@@ -215,21 +217,19 @@ local function eventFunc(self, event_elapsed, ...)
 						if arr["alive_inrange"] then
 							buff_num = buff_num + 1
 						end
-
 					end
 
-					buffDuration = buffDuration + arr["buffDuration"]
-
-					if ( (arr["buffDuration"] < buffDuration_min) and ((buff_unitid == nil) or arr["alive_inrage"]) ) then
+					if ( (arr["buffDuration"] < buffDuration_min) and ((buff_unitid == nil) or arr["alive_inrange"]) ) then
 						buffDuration_min = arr["buffDuration"]
 						buff_unitid = arr["unitid"]
 					end
 
+					buffDuration = buffDuration + arr["buffDuration"]
 					num_subgroup_members = num_subgroup_members + 1
 				end
 
 				-- found a subgroup with missing buffs and everyone in range, stop here
-				if (iter == 1) and (buff_num_rangecheck == buff_num) then
+				if (iter == 1) and (buff_num_rangecheck == buff_num) and (buff_num > 0) then
 					iter_break = true
 					break
 				end
