@@ -94,6 +94,10 @@ local function BuffMissing(unitid, curtime)
 
 	local alive_inrange = (not UnitIsDeadOrGhost(unitid)) and (IsSpellInRange(checkSpell1, unitid) == 1)
 
+	if (not alive_inrange) and (not missing1) and (not missing2) then
+		expiration = curtime + 3600 -- out of range w/ buff counts as full duration
+	end
+
 	return (missing1 and missing2), alive_inrange, expiration
 end
 
