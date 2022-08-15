@@ -5,7 +5,7 @@ if ( (select(2, UnitClass("player"))) ~= "DRUID" ) then
 end
 
 local function format_percent(percent)
-	return format("%d", ceil(percent))
+	return format("%d", floor(percent + 0.5))
 end
 
 local function percent_color(percent)
@@ -94,7 +94,7 @@ local function BuffMissing(unitid, curtime)
 
 	local alive_inrange = (not UnitIsDeadOrGhost(unitid)) and (IsSpellInRange(checkSpell1, unitid) == 1)
 
-	if (not alive_inrange) and (not missing1) and (not missing2) then
+	if (not alive_inrange) and ((not missing1) or (not missing2)) then
 		expiration = curtime + 3600 -- out of range w/ buff counts as full duration
 	end
 
@@ -213,6 +213,7 @@ local function eventFunc(self, event_elapsed, ...)
 				num_subgroup_members = 0
 				buffDuration_min = 1E300
 				buff_unitid = nil
+
 
 				for i, arr in pairs(arr_subgroup) do
 					if arr["buffMissing"] then
