@@ -224,7 +224,7 @@ local function eventFunc(self, event_elapsed, ...)
 						end
 					end
 
-					if ( (arr["buffDuration"] < buffDuration_min) and ((buff_unitid == nil) or arr["alive_inrange"]) ) then
+					if (arr["buffDuration"] < buffDuration_min) then
 						buffDuration_min = arr["buffDuration"]
 						buff_unitid = arr["unitid"]
 					end
