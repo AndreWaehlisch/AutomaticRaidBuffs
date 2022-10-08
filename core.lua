@@ -5,6 +5,9 @@ if ( (select(2, UnitClass("player"))) ~= "DRUID" ) then
 end
 
 local function format_percent(percent)
+	if (percent > 100) or (percent < 0) then
+		return -1
+	end
 	return format("%d", floor(percent + 0.5))
 end
 
@@ -18,8 +21,9 @@ local function percent_color(percent)
 	end
 end
 
-local checkSpell1 = GetSpellInfo(1126) -- mark of the wild
-local checkSpell2 = GetSpellInfo(21849) -- gift of the wild
+local checkSpell1 = GetSpellInfo(48469) -- mark of the wild
+local checkSpell2 = GetSpellInfo(48470) -- gift of the wild
+local pets_blacklist = { DRUID=true, MAGE=true, SHAMAN=true } -- ignore pets from these classes
 
 local buffButton = CreateFrame("Button", "AutomaticRaidBuffs_BuffButton", UIParent, "SecureActionButtonTemplate")
 buffButton:SetPoint("CENTER", UIParent, "CENTER")
@@ -138,10 +142,16 @@ local function SearchBuff()
 			arr["buffDuration"] = expiration - curtime
 
 			-- check pet
-			unitid = unit_base .. "pet" .. i_member
-			buffMissing, alive_inrange = BuffMissing(unitid, curtime)
-			if buffMissing and alive_inrange then
-				result_pet = unitid
+			if pets_blacklist[UnitClassBase(unitid)] == nil then
+				unitid = unit_base .. "pet" .. i_member
+				buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
+				if buffMissing and alive_inrange then
+					result_pet = {}
+					result_pet["unitid"] = unitid
+					result_pet["alive_inrange"] = alive_inrange
+					result_pet["buffDuration"] = expiration - curtime
+					result_pet["buffMissing"] = true
+				end
 			end
 		end
 	end
@@ -255,17 +265,25 @@ local function eventFunc(self, event_elapsed, ...)
 		if (buff_num_rangecheck == 0) and (result_pet ~= nil) then
 			buff_num = 1
 			buff_num_rangecheck = 1
-			buff_unitid = result_pet
+			buff_unitid = result_pet["unitid"]
+			buffDuration = result_pet["buffDuration"]
+			buffDuration_min = result_pet["buffDuration"]
 		end
 
 		if buff_num_rangecheck > 0 then
-			buffButton:Show()
 			local unitname = UnitNameUnmodified(buff_unitid)
 			local unitclass = UnitClassBase(buff_unitid)
-			local hexcolor = RAID_CLASS_COLORS[unitclass]:GenerateHexColor()
+			local hexcolor_obj = RAID_CLASS_COLORS[unitclass]
+
+			if hexcolor_obj == nil then
+				return -- this may happen during initialization, just bail out
+			end
+
+			local hexcolor = hexcolor_obj:GenerateHexColor()
 			local percent_color_string_all = percent_color(100 * buffDuration / (max(num_subgroup_members, 1)*3600))
 			local percent_color_string_min = percent_color(100 * buffDuration_min / 3600)
 
+			buffButton:Show()
 			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. "/" .. buff_num_rangecheck .. ")")
 			buffButton.durationString:SetText("Grp: " .. subgroup .. "\nDuration: " .. percent_color_string_min .. "% / " ..  percent_color_string_all .. "%")
 
