@@ -118,7 +118,7 @@ local function SearchBuff()
 	end
 
 	local curtime = GetTime()
-	local result_arr = {{}, {}, {}, {}, {}}
+	local result_arr = {}
 	local result_pet = nil
 
 	for i_member = 1, n_members do
@@ -126,32 +126,23 @@ local function SearchBuff()
 		local buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
 		local arr = {}
 
-		local subgroup
-		if isinraid then
-			subgroup = select(3, GetRaidRosterInfo(i_member))
-		else
-			subgroup = 1
-		end
+		tinsert(result_arr, arr)
 
-		if ( (subgroup ~= nil) and (subgroup <=5) ) then
-			tinsert(result_arr[subgroup], arr)
+		arr["unitid"] = unitid
+		arr["buffMissing"] = buffMissing
+		arr["alive_inrange"] = alive_inrange
+		arr["buffDuration"] = expiration - curtime
 
-			arr["unitid"] = unitid
-			arr["buffMissing"] = buffMissing
-			arr["alive_inrange"] = alive_inrange
-			arr["buffDuration"] = expiration - curtime
-
-			-- check pet
-			if pets_blacklist[UnitClassBase(unitid)] == nil then
-				unitid = unit_base .. "pet" .. i_member
-				buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
-				if buffMissing and alive_inrange then
-					result_pet = {}
-					result_pet["unitid"] = unitid
-					result_pet["alive_inrange"] = alive_inrange
-					result_pet["buffDuration"] = expiration - curtime
-					result_pet["buffMissing"] = true
-				end
+		-- check pet
+		if pets_blacklist[UnitClassBase(unitid)] == nil then
+			unitid = unit_base .. "pet" .. i_member
+			buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
+			if buffMissing and alive_inrange then
+				result_pet = {}
+				result_pet["unitid"] = unitid
+				result_pet["alive_inrange"] = alive_inrange
+				result_pet["buffDuration"] = expiration - curtime
+				result_pet["buffMissing"] = true
 			end
 		end
 	end
@@ -161,7 +152,7 @@ local function SearchBuff()
 		local buffMissing, alive_inrange, expiration = BuffMissing("player", curtime)
 		local arr = {}
 
-		tinsert(result_arr[1], arr)
+		tinsert(result_arr, arr)
 
 		arr["unitid"] = "player"
 		arr["buffMissing"] = buffMissing
@@ -205,60 +196,29 @@ local function eventFunc(self, event_elapsed, ...)
 
 		local result_arr, result_pet = SearchBuff()
 
-		local buff_num
-		local buff_num_rangecheck
-		local buffDuration -- duration (in seconds) of remaining buffs
-		local subgroup
-		local num_subgroup_members
-		local buffDuration_min
-		local buff_unitid
-		local iter_break = false
+		local buff_num = 0
+		local buff_num_rangecheck = 0
+		local num_members = 0
+		local buffDuration = 0-- duration (in seconds) of remaining buffs
+		local buffDuration_min = 1E300
+		local buff_unitid = nil
 
-		for iter = 1, 2 do
-			for i_subgroup, arr_subgroup in pairs(result_arr) do
-				buff_num = 0
-				buff_num_rangecheck = 0
-				buffDuration = 0
-				subgroup = i_subgroup
-				num_subgroup_members = 0
-				buffDuration_min = 1E300
-				buff_unitid = nil
+		for i, arr in pairs(result_arr) do
+			if arr["buffMissing"] then
+				buff_num_rangecheck = buff_num_rangecheck + 1
 
-
-				for i, arr in pairs(arr_subgroup) do
-					if arr["buffMissing"] then
-						buff_num_rangecheck = buff_num_rangecheck + 1
-
-						if arr["alive_inrange"] then
-							buff_num = buff_num + 1
-						end
-					end
-
-					if (arr["buffDuration"] < buffDuration_min) then
-						buffDuration_min = arr["buffDuration"]
-						buff_unitid = arr["unitid"]
-					end
-
-					buffDuration = buffDuration + arr["buffDuration"]
-					num_subgroup_members = num_subgroup_members + 1
-				end
-
-				-- found a subgroup with missing buffs and everyone in range, stop here
-				if (iter == 1) and (buff_num_rangecheck == buff_num) and (buff_num > 0) then
-					iter_break = true
-					break
-				end
-
-				-- on the second iter, found a subgroup with missing buffs (not everyone in range), stop there
-				if (iter == 2) and (buff_num_rangecheck > 0) then
-					iter_break = true
-					break
+				if arr["alive_inrange"] then
+					buff_num = buff_num + 1
 				end
 			end
 
-			if iter_break then
-				break
+			if (arr["buffDuration"] < buffDuration_min) then
+				buffDuration_min = arr["buffDuration"]
+				buff_unitid = arr["unitid"]
 			end
+
+			buffDuration = buffDuration + arr["buffDuration"]
+			num_members = num_members + 1
 		end
 
 		-- if no player needs buffs: check for pets
@@ -280,12 +240,12 @@ local function eventFunc(self, event_elapsed, ...)
 			end
 
 			local hexcolor = hexcolor_obj:GenerateHexColor()
-			local percent_color_string_all = percent_color(100 * buffDuration / (max(num_subgroup_members, 1)*3600))
+			local percent_color_string_all = percent_color(100 * buffDuration / (max(num_members, 1)*3600))
 			local percent_color_string_min = percent_color(100 * buffDuration_min / 3600)
 
 			buffButton:Show()
 			buffButton.labelString:SetText("|c" .. hexcolor .. unitname .. "|r (" .. buff_num .. "/" .. buff_num_rangecheck .. ")")
-			buffButton.durationString:SetText("Grp: " .. subgroup .. "\nDuration: " .. percent_color_string_min .. "% / " ..  percent_color_string_all .. "%")
+			buffButton.durationString:SetText("Duration: " .. percent_color_string_min .. "% / " ..  percent_color_string_all .. "%")
 
 			buffButton:SetAttribute("unit", buff_unitid)
 			buffButton.icon:SetDesaturated(buff_num < buff_num_rangecheck)
