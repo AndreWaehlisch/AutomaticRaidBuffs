@@ -23,7 +23,7 @@ end
 
 local checkSpell1 = GetSpellInfo(48469) -- mark of the wild
 local checkSpell2 = GetSpellInfo(48470) -- gift of the wild
-local pets_blacklist = { DRUID=true, MAGE=true, SHAMAN=true } -- ignore pets from these classes
+local pets_blacklist = { DRUID=true, MAGE=true, SHAMAN=true, PRIEST=true } -- ignore pets from these classes
 
 local buffButton = CreateFrame("Button", "AutomaticRaidBuffs_BuffButton", UIParent, "SecureActionButtonTemplate")
 buffButton:SetPoint("CENTER", UIParent, "CENTER")
