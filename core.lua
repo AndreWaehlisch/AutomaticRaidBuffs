@@ -21,8 +21,7 @@ local function percent_color(percent)
 	end
 end
 
-local checkSpell1 = GetSpellInfo(48469) -- mark of the wild
-local checkSpell2 = GetSpellInfo(48470) -- gift of the wild
+local checkSpell = GetSpellInfo(1126) -- mark of the wild
 local pets_blacklist = { DRUID=true, MAGE=true, SHAMAN=true, PRIEST=true } -- ignore pets from these classes
 
 local buffButton = CreateFrame("Button", "AutomaticRaidBuffs_BuffButton", UIParent, "SecureActionButtonTemplate")
@@ -43,8 +42,8 @@ if not InCombatLockdown() then
 end
 
 buffButton:SetAttribute("type", "spell")
-buffButton:SetAttribute("spell1", checkSpell1)
-buffButton:SetAttribute("spell2", checkSpell2)
+buffButton:SetAttribute("spell1", checkSpell)
+buffButton:SetAttribute("spell2", checkSpell)
 buffButton:RegisterForClicks("RightButtonUp", "LeftButtonUp")
 
 buffButton.labelString = buffButton:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -69,40 +68,29 @@ local function BuffMissing(unitid, curtime)
 		return false, true, curtime + 3600
 	end
 
-	local expiration = curtime
-	local spell1, _, _, _, _, expiration1 = AuraUtil.FindAuraByName(checkSpell1, unitid)
-	local spell2, _, _, _, _, expiration2 = AuraUtil.FindAuraByName(checkSpell2, unitid)
+	local spell, _, _, _, _, expiration = AuraUtil.FindAuraByName(checkSpell, unitid)
 
-	local missing1 = true
-	local missing2 = true
+	local missing = true
 
-	if spell1 then
-		if (((expiration1 - curtime) > 420) or (expiration1 == 0)) then
-			missing1 = false
+	if spell then
+		if (((expiration - curtime) > 420) or (expiration == 0)) then
+			missing = false
 		end
 
-		if expiration1 > 0 then
-			expiration = expiration1
+		if expiration > 0 then
+			expiration = expiration
 		end
+	else
+		expiration = curtime
 	end
 
-	if spell2 then
-		if (((expiration2 - curtime) > 420) or (expiration2 == 0)) then
-			missing2 = false
-		end
+	local alive_inrange = (not UnitIsDeadOrGhost(unitid)) and (IsSpellInRange(checkSpell, unitid) == 1)
 
-		if expiration2 > 0 then
-			expiration = expiration2
-		end
-	end
-
-	local alive_inrange = (not UnitIsDeadOrGhost(unitid)) and (IsSpellInRange(checkSpell1, unitid) == 1)
-
-	if (not alive_inrange) and ((not missing1) or (not missing2)) then
+	if (not alive_inrange) and (not missing) then
 		expiration = curtime + 3600 -- out of range w/ buff counts as full duration
 	end
 
-	return (missing1 and missing2), alive_inrange, expiration
+	return missing, alive_inrange, expiration
 end
 
 local function SearchBuff()
@@ -122,9 +110,14 @@ local function SearchBuff()
 	local result_pet = nil
 
 	for i_member = 1, n_members do
+		local _, _, subgroup = GetRaidRosterInfo(i_member)
 		local unitid = unit_base .. i_member
 		local buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
 		local arr = {}
+
+		if (subgroup > 5) and (n_members > 25) then
+			buffMissing = false -- only look at the first 5 sub-groups
+		end
 
 		tinsert(result_arr, arr)
 
