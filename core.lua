@@ -22,7 +22,6 @@ local function percent_color(percent)
 end
 
 local checkSpell = GetSpellInfo(1126) -- mark of the wild
-local pets_blacklist = { DRUID=true, MAGE=true, SHAMAN=true, PRIEST=true } -- ignore pets from these classes
 
 local buffButton = CreateFrame("Button", "AutomaticRaidBuffs_BuffButton", UIParent, "SecureActionButtonTemplate")
 buffButton:SetPoint("CENTER", UIParent, "CENTER")
@@ -107,7 +106,6 @@ local function SearchBuff()
 
 	local curtime = GetTime()
 	local result_arr = {}
-	local result_pet = nil
 
 	for i_member = 1, n_members do
 		local _, _, subgroup = GetRaidRosterInfo(i_member)
@@ -125,19 +123,6 @@ local function SearchBuff()
 		arr["buffMissing"] = buffMissing
 		arr["alive_inrange"] = alive_inrange
 		arr["buffDuration"] = expiration - curtime
-
-		-- check pet
-		if pets_blacklist[UnitClassBase(unitid)] == nil then
-			unitid = unit_base .. "pet" .. i_member
-			buffMissing, alive_inrange, expiration = BuffMissing(unitid, curtime)
-			if buffMissing and alive_inrange then
-				result_pet = {}
-				result_pet["unitid"] = unitid
-				result_pet["alive_inrange"] = alive_inrange
-				result_pet["buffDuration"] = expiration - curtime
-				result_pet["buffMissing"] = true
-			end
-		end
 	end
 
 	-- check for player if not in raid (since player is not part of "partyN")
@@ -153,7 +138,7 @@ local function SearchBuff()
 		arr["buffDuration"] = expiration - curtime
 	end
 
-	return result_arr, result_pet
+	return result_arr
 end
 
 local buffeventFrame = CreateFrame("Frame")
@@ -187,7 +172,7 @@ local function eventFunc(self, event_elapsed, ...)
 	if (elapsed > 0.5) then
 		elapsed = 0
 
-		local result_arr, result_pet = SearchBuff()
+		local result_arr = SearchBuff()
 
 		local buff_num = 0
 		local buff_num_rangecheck = 0
@@ -212,15 +197,6 @@ local function eventFunc(self, event_elapsed, ...)
 
 			buffDuration = buffDuration + arr["buffDuration"]
 			num_members = num_members + 1
-		end
-
-		-- if no player needs buffs: check for pets
-		if (buff_num_rangecheck == 0) and (result_pet ~= nil) then
-			buff_num = 1
-			buff_num_rangecheck = 1
-			buff_unitid = result_pet["unitid"]
-			buffDuration = result_pet["buffDuration"]
-			buffDuration_min = result_pet["buffDuration"]
 		end
 
 		if buff_num_rangecheck > 0 then
